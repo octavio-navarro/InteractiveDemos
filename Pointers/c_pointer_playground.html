@@ -613,55 +613,92 @@
         ]
       },
       array_ptr: {
-        code: [
-          `int arr[3] = {10, 20, 30};`,
-          `int *ptr = arr;`,
-          `ptr = ptr + 1;`,
-          `*ptr = 88;`
-        ],
-        steps: [
-          {
-            line: 0,
-            vars: {
-              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
-              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
-              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 }
-            },
-            expl: "Array elements stored contiguously in memory with 4-byte spacing."
-          },
-          {
-            line: 1,
-            vars: {
-              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
-              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
-              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
-              ptr: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0000' }
-            },
-            expl: "Array name 'arr' decays to pointer targeting element 0 (&arr[0])."
-          },
-          {
-            line: 2,
-            vars: {
-              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
-              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
-              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
-              ptr: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
-            },
-            expl: "Pointer arithmetic (ptr + 1) scales by sizeof(int) = 4 bytes, advancing address from 0x7FFF0000 to 0x7FFF0004 (&arr[1])."
-          },
-          {
-            line: 3,
-            vars: {
-              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
-              'arr[1]': { type: 'int', val: 88, addr: '0x7FFF0004', size: 4 },
-              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
-              ptr: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
-            },
-            expl: "Dereference *ptr updates element arr[1] to 88."
-          }
-        ]
-      }
-    };
+  code: [
+    `int *ptr = (int*)malloc(3 * sizeof(int));`,
+    `*ptr = 10;`,
+    `*(ptr + 1) = 20;`,
+    `*(ptr + 2) = 30;`,
+    `free(ptr);`
+  ],
+  steps: [
+    {
+      line: 0,
+      vars: {
+        ptr: {
+          type: 'int*',
+          val: '0x90000000',
+          addr: '0x7FFF0010',
+          size: 8,
+          pointsTo: '0x90000000'
+        },
+        'heap[0]': { type: 'int', val: 0, addr: '0x90000000', size: 4 },
+        'heap[1]': { type: 'int', val: 0, addr: '0x90000004', size: 4 },
+        'heap[2]': { type: 'int', val: 0, addr: '0x90000008', size: 4 }
+      },
+      expl: 'malloc allocates space for 3 integers and returns the address of the first one.'
+    },
+    {
+      line: 1,
+      vars: {
+        ptr: {
+          type: 'int*',
+          val: '0x90000000',
+          addr: '0x7FFF0010',
+          size: 8,
+          pointsTo: '0x90000000'
+        },
+        'heap[0]': { type: 'int', val: 10, addr: '0x90000000', size: 4 },
+        'heap[1]': { type: 'int', val: 0, addr: '0x90000004', size: 4 },
+        'heap[2]': { type: 'int', val: 0, addr: '0x90000008', size: 4 }
+      },
+      expl: '*ptr accesses the memory location pointed to by ptr.'
+    },
+    {
+      line: 2,
+      vars: {
+        ptr: {
+          type: 'int*',
+          val: '0x90000000',
+          addr: '0x7FFF0010',
+          size: 8,
+          pointsTo: '0x90000000'
+        },
+        'heap[0]': { type: 'int', val: 10, addr: '0x90000000', size: 4 },
+        'heap[1]': { type: 'int', val: 20, addr: '0x90000004', size: 4 },
+        'heap[2]': { type: 'int', val: 0, addr: '0x90000008', size: 4 }
+      },
+      expl: 'ptr + 1 advances by sizeof(int) bytes to the next integer.'
+    },
+    {
+      line: 3,
+      vars: {
+        ptr: {
+          type: 'int*',
+          val: '0x90000000',
+          addr: '0x7FFF0010',
+          size: 8,
+          pointsTo: '0x90000000'
+        },
+        'heap[0]': { type: 'int', val: 10, addr: '0x90000000', size: 4 },
+        'heap[1]': { type: 'int', val: 20, addr: '0x90000004', size: 4 },
+        'heap[2]': { type: 'int', val: 30, addr: '0x90000008', size: 4 }
+      },
+      expl: '*(ptr + 2) accesses the third integer in the allocated block.'
+    },
+    {
+      line: 4,
+      vars: {
+        ptr: {
+          type: 'int*',
+          val: 'NULL',
+          addr: '0x7FFF0010',
+          size: 8
+        }
+      },
+      expl: 'free(ptr) releases the heap memory. Setting the pointer to NULL afterwards avoids a dangling pointer.'
+    }
+  ]
+}    };
 
     // Initialize Page Application
     window.addEventListener('DOMContentLoaded', () => {
