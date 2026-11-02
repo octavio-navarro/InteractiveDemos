@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C Pointer & Memory Visualizer Playground</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+            heading: ['Space Grotesk', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              900: '#0c4a6e',
+            },
+            accent: {
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              purple: '#8b5cf6',
+              rose: '#f43f5e',
+              indigo: '#6366f1'
+            },
+            dark: {
+              bg: '#090d16',
+              panel: '#111827',
+              card: '#1f2937',
+              border: '#374151',
+              hover: '#2d3748'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar for dark theme */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+
+    /* Glows & Transitions */
+    .memory-cell {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .memory-cell:hover {
+      transform: translateY(-2px);
+    }
+    .active-cell-highlight {
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+      border-color: #38bdf8 !important;
+    }
+    .pointer-source {
+      box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+      border-color: #8b5cf6 !important;
+    }
+    .pointer-target {
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+      border-color: #10b981 !important;
+    }
+    
+    /* Code Highlighting lines */
+    .code-line {
+      transition: background-color 0.2s;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .code-line.active {
+      background-color: rgba(14, 165, 233, 0.25);
+      border-left: 3px solid #38bdf8;
+      font-weight: 600;
+    }
+
+    /* Canvas SVG Arrow animations */
+    .arrow-path {
+      stroke-dasharray: 8;
+      animation: dash 1.5s linear infinite;
+    }
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -16;
+      }
+    }
+  </style>
+</head>
+<body class="bg-dark-bg text-slate-200 font-sans min-h-screen flex flex-col antialiased">
+
+  <!-- SVG Overlay Canvas for Dynamic Pointer Arrows -->
+  <svg id="pointer-svg-canvas" class="fixed inset-0 pointer-events-none z-30 w-full h-full">
+    <defs>
+      <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#38bdf8" />
+      </marker>
+      <marker id="arrowhead-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#8b5cf6" />
+      </marker>
+      <marker id="arrowhead-emerald" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+        <polygon points="0 0, 8 3, 0 6" fill="#10b981" />
+      </marker>
+      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3" result="blur" />
+        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+      </filter>
+    </defs>
+  </svg>
+
+  <!-- Top Navigation Header -->
+  <header class="bg-dark-panel border-b border-dark-border sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-brand-600/20 text-brand-400 rounded-lg border border-brand-500/30">
+          <i class="fa-solid fa-microchip text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-heading font-bold text-lg text-white leading-tight">C Pointer & Memory Playground</h1>
+          <p class="text-xs text-slate-400">Interactive Visualization, Indirection &amp; Arithmetic Engine</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 bg-dark-bg p-1 rounded-xl border border-dark-border">
+        <button onclick="switchTab('simulator')" id="tab-btn-simulator" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all bg-brand-600 text-white shadow">
+          <i class="fa-solid fa-play text-xs"></i> Code Execution
+        </button>
+        <button onclick="switchTab('indirection')" id="tab-btn-indirection" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-slate-400 hover:text-white">
+          <i class="fa-solid fa-diagram-project text-xs"></i> Indirection (p, *p, **p)
+        </button>
+        <button onclick="switchTab('arithmetic')" id="tab-btn-arithmetic" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all text-slate-400 hover:text-white">
+          <i class="fa-solid fa-calculator text-xs"></i> Pointer Arithmetic
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Body -->
+  <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT PANEL: Active Workspace / Interactive Modules (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col gap-6">
+
+      <!-- MODULE 1: Live Step-Through Simulator -->
+      <div id="module-simulator" class="module-tab bg-dark-panel border border-dark-border rounded-xl p-5 shadow-xl flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-dark-border pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-code text-brand-400"></i>
+            <h2 class="font-heading font-semibold text-white">Interactive C Code Step-Through</h2>
+          </div>
+          <span class="text-xs bg-brand-900/60 text-brand-400 border border-brand-500/30 px-2.5 py-1 rounded-full font-mono">Preset Scenarios</span>
+        </div>
+
+        <!-- Scenario Selection Bar -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1">
+          <button id="btn-scenario-basic" onclick="loadScenario('basic')" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-brand-500/40 bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 transition">
+            1. Basic Pointers (&amp;, *)
+          </button>
+          <button id="btn-scenario-swap" onclick="loadScenario('swap')" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-dark-border bg-dark-bg text-slate-300 hover:border-slate-500 transition">
+            2. Variable Swap
+          </button>
+          <button id="btn-scenario-double_ptr" onclick="loadScenario('double_ptr')" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-dark-border bg-dark-bg text-slate-300 hover:border-slate-500 transition">
+            3. Double Pointer (int**)
+          </button>
+          <button id="btn-scenario-array_ptr" onclick="loadScenario('array_ptr')" class="scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-dark-border bg-dark-bg text-slate-300 hover:border-slate-500 transition">
+            4. Array &amp; Pointer Traversal
+          </button>
+        </div>
+
+        <!-- C Code Display Panel -->
+        <div class="bg-dark-bg border border-dark-border rounded-xl p-4 font-mono text-sm leading-relaxed relative overflow-hidden shadow-inner">
+          <div id="code-container" class="flex flex-col gap-0.5">
+            <!-- Code lines populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Step Controls Bar -->
+        <div class="flex items-center justify-between bg-dark-card p-3 rounded-xl border border-dark-border">
+          <div class="flex items-center gap-2">
+            <button onclick="simPrevStep()" id="btn-prev" class="px-3.5 py-2 rounded-lg bg-dark-bg hover:bg-dark-border text-slate-200 border border-dark-border font-semibold text-xs flex items-center gap-1.5 transition disabled:opacity-40">
+              <i class="fa-solid fa-chevron-left"></i> Previous
+            </button>
+            <button onclick="simNextStep()" id="btn-next" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs flex items-center gap-1.5 transition shadow">
+              Next Step <i class="fa-solid fa-chevron-right"></i>
+            </button>
+            <button onclick="simReset()" class="px-3.5 py-2 rounded-lg bg-dark-bg hover:bg-dark-border text-slate-400 hover:text-white border border-dark-border font-semibold text-xs transition">
+              <i class="fa-solid fa-rotate-right"></i> Reset
+            </button>
+          </div>
+          <div class="text-xs text-slate-400 font-mono">
+            Step <span id="sim-step-num" class="text-brand-400 font-bold">1</span> / <span id="sim-step-total">5</span>
+          </div>
+        </div>
+
+        <!-- Step Explanation Callout -->
+        <div class="bg-brand-900/30 border border-brand-500/30 rounded-xl p-3.5 flex items-start gap-3">
+          <i class="fa-solid fa-circle-info text-brand-400 mt-0.5"></i>
+          <div>
+            <h4 class="text-xs font-semibold text-brand-300 uppercase tracking-wider mb-0.5">Current Execution Step Explanation</h4>
+            <p id="sim-explanation" class="text-xs text-slate-300 leading-relaxed">
+              Initialize variable <code class="text-brand-400">a</code> with integer value <code class="text-emerald-400">42</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODULE 2: Pointer Indirection Visualizer -->
+      <div id="module-indirection" class="module-tab hidden bg-dark-panel border border-dark-border rounded-xl p-5 shadow-xl flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-dark-border pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-diagram-project text-accent-purple"></i>
+            <h2 class="font-heading font-semibold text-white">Pointer Indirection Chain Visualizer</h2>
+          </div>
+          <span class="text-xs bg-purple-900/60 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-full font-mono">Single &amp; Double Dereference</span>
+        </div>
+
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Observe how dereferencing with <code class="text-brand-400 font-mono">*</code> follows address pointers step-by-step. Toggle operations below to dereference down the pointer chain.
+        </p>
+
+        <!-- Indirection Interactive Chain Canvas -->
+        <div class="bg-dark-bg border border-dark-border rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 relative">
+          
+          <!-- Box 1: **pp (Double Pointer) -->
+          <div id="chain-ptr2" class="flex-1 w-full p-4 rounded-xl border border-purple-500/40 bg-purple-950/20 flex flex-col items-center gap-2 transition-all">
+            <span class="text-xs font-mono font-bold text-purple-400">pp (int**)</span>
+            <div class="bg-dark-card border border-purple-500/50 rounded-lg px-4 py-2 font-mono text-center w-full">
+              <span class="text-xs text-slate-400 block">Address: <code class="text-purple-300">0x7FFF0018</code></span>
+              <span class="text-sm font-bold text-purple-300">Value: <code class="text-brand-400">0x7FFF0010</code></span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono text-center">Points to &amp;p</span>
+          </div>
+
+          <i class="fa-solid fa-arrow-right text-purple-400 hidden md:block text-lg"></i>
+          <i class="fa-solid fa-arrow-down text-purple-400 md:hidden text-lg"></i>
+
+          <!-- Box 2: *p (Single Pointer) -->
+          <div id="chain-ptr1" class="flex-1 w-full p-4 rounded-xl border border-brand-500/40 bg-brand-950/20 flex flex-col items-center gap-2 transition-all">
+            <span class="text-xs font-mono font-bold text-brand-400">p (int*)</span>
+            <div class="bg-dark-card border border-brand-500/50 rounded-lg px-4 py-2 font-mono text-center w-full">
+              <span class="text-xs text-slate-400 block">Address: <code class="text-brand-300">0x7FFF0010</code></span>
+              <span class="text-sm font-bold text-brand-300">Value: <code class="text-emerald-400">0x7FFF0004</code></span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono text-center">Points to &amp;val</span>
+          </div>
+
+          <i class="fa-solid fa-arrow-right text-brand-400 hidden md:block text-lg"></i>
+          <i class="fa-solid fa-arrow-down text-brand-400 md:hidden text-lg"></i>
+
+          <!-- Box 3: Target Primitive Value -->
+          <div id="chain-target" class="flex-1 w-full p-4 rounded-xl border border-emerald-500/40 bg-emerald-950/20 flex flex-col items-center gap-2 transition-all">
+            <span class="text-xs font-mono font-bold text-emerald-400">val (int)</span>
+            <div class="bg-dark-card border border-emerald-500/50 rounded-lg px-4 py-2 font-mono text-center w-full">
+              <span class="text-xs text-slate-400 block">Address: <code class="text-emerald-300">0x7FFF0004</code></span>
+              <span id="chain-target-val" class="text-base font-bold text-emerald-400">Value: 99</span>
+            </div>
+            <span class="text-[10px] text-slate-400 font-mono text-center">Data Target</span>
+          </div>
+        </div>
+
+        <!-- Indirection Controls & Interactive Expressions -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button onclick="evalIndirection('val')" class="p-3 bg-dark-card hover:bg-dark-border border border-dark-border rounded-xl text-left font-mono transition">
+            <div class="text-xs text-slate-400">Evaluate</div>
+            <div class="text-sm font-bold text-emerald-400">val</div>
+            <div class="text-[11px] text-slate-400 mt-1">Direct Value = 99</div>
+          </button>
+          <button onclick="evalIndirection('p')" class="p-3 bg-dark-card hover:bg-dark-border border border-dark-border rounded-xl text-left font-mono transition">
+            <div class="text-xs text-slate-400">Evaluate</div>
+            <div class="text-sm font-bold text-brand-400">*p</div>
+            <div class="text-[11px] text-slate-400 mt-1">Dereference once = 99</div>
+          </button>
+          <button onclick="evalIndirection('pp')" class="p-3 bg-dark-card hover:bg-dark-border border border-dark-border rounded-xl text-left font-mono transition">
+            <div class="text-xs text-slate-400">Evaluate</div>
+            <div class="text-sm font-bold text-purple-400">**pp</div>
+            <div class="text-[11px] text-slate-400 mt-1">Double dereference = 99</div>
+          </button>
+        </div>
+
+        <!-- Value Mutator Controls -->
+        <div class="bg-dark-bg p-4 rounded-xl border border-dark-border flex items-center justify-between gap-4">
+          <span class="text-xs text-slate-300 font-mono">Mutate value via pointer dereference:</span>
+          <div class="flex items-center gap-2">
+            <input type="number" id="indirection-new-val" value="150" class="w-20 px-2.5 py-1 rounded bg-dark-panel border border-dark-border text-xs font-mono text-white text-center focus:outline-none focus:border-brand-500">
+            <button onclick="mutateViaPointer()" class="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition">
+              **pp = new_val
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODULE 3: Pointer Arithmetic Interactive Engine -->
+      <div id="module-arithmetic" class="module-tab hidden bg-dark-panel border border-dark-border rounded-xl p-5 shadow-xl flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-dark-border pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-calculator text-accent-amber"></i>
+            <h2 class="font-heading font-semibold text-white">Pointer Arithmetic Byte-Scaling Engine</h2>
+          </div>
+          <span class="text-xs bg-amber-900/60 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full font-mono">stride = N * sizeof(T)</span>
+        </div>
+
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Adding 1 to a pointer (<code class="text-amber-400 font-mono">ptr + 1</code>) advances its hex address by <code class="text-brand-400 font-mono">sizeof(DataType)</code> bytes rather than 1 raw byte. Select types and offsets below:
+        </p>
+
+        <!-- Controls: Type Selector & Increment Step -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-dark-bg p-4 rounded-xl border border-dark-border">
+          <div>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Data Type Sizing</label>
+            <select id="arith-type" onchange="updateArithmeticView()" class="w-full bg-dark-panel border border-dark-border rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-brand-500">
+              <option value="char">char (1 Byte)</option>
+              <option value="short">short (2 Bytes)</option>
+              <option value="int" selected>int (4 Bytes)</option>
+              <option value="double">double (8 Bytes)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Offset Step Index (ptr + i)</label>
+            <div class="flex items-center gap-3">
+              <input type="range" id="arith-offset" min="0" max="3" value="0" oninput="updateArithmeticView()" class="flex-grow accent-brand-500">
+              <span id="arith-offset-val" class="font-mono text-sm font-bold text-brand-400 w-8 text-center">+0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arithmetic Visualization Strip -->
+        <div id="arithmetic-visual-strip" class="bg-dark-bg p-4 rounded-xl border border-dark-border overflow-x-auto">
+          <!-- Dynamic byte grid rendered here -->
+        </div>
+
+        <!-- Formula Math Breakdown Card -->
+        <div class="bg-dark-card border border-dark-border rounded-xl p-4 font-mono text-xs flex flex-col gap-2">
+          <div class="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Address Calculation Breakdown</div>
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-slate-300">Base Address:</span>
+            <span class="text-brand-400 font-bold">0x7FFF0000</span>
+          </div>
+          <div id="arith-formula" class="text-slate-200">
+            0x7FFF0000 + (<span class="text-amber-400">0</span> * <span class="text-purple-400">4 bytes</span>) = <span class="text-emerald-400 font-bold">0x7FFF0000</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variable Inspector Table Panel -->
+      <div class="bg-dark-panel border border-dark-border rounded-xl p-5 shadow-xl">
+        <div class="flex items-center justify-between mb-3 border-b border-dark-border pb-2">
+          <h3 class="font-heading font-semibold text-sm text-white flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-brand-400"></i> Active Stack Frame Variables
+          </h3>
+          <span class="text-[10px] text-slate-400 font-mono">Stack Base: 0x7FFF0000</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left font-mono text-xs">
+            <thead>
+              <tr class="text-slate-400 border-b border-dark-border text-[11px]">
+                <th class="pb-2">Symbol</th>
+                <th class="pb-2">Type</th>
+                <th class="pb-2">Address (&amp;)</th>
+                <th class="pb-2">Value</th>
+                <th class="pb-2">Points To</th>
+              </tr>
+            </thead>
+            <tbody id="variable-table-body" class="divide-y divide-dark-border/50 text-slate-300">
+              <!-- Dynamically Populated Rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT PANEL: Continuous RAM / Physical Memory Layout Visualization (5 cols) -->
+    <section class="lg:col-span-5 flex flex-col gap-6">
+
+      <div class="bg-dark-panel border border-dark-border rounded-xl p-5 shadow-xl flex flex-col gap-4 sticky top-20">
+        <div class="flex items-center justify-between border-b border-dark-border pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-memory text-brand-400"></i>
+            <h2 class="font-heading font-semibold text-white">RAM Memory Grid (Physical Bytes)</h2>
+          </div>
+          <button onclick="toggleHexMode()" id="btn-hex-mode" class="text-xs bg-dark-bg border border-dark-border text-slate-300 hover:text-white px-2.5 py-1 rounded-lg font-mono transition">
+            Hex View: OFF
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-400">
+          Continuous stack memory space allocated downward. Hover or click memory cells to highlight pointers.
+        </p>
+
+        <!-- Memory Grid Container -->
+        <div class="bg-dark-bg border border-dark-border rounded-xl p-3 flex flex-col gap-2 max-h-[520px] overflow-y-auto">
+          
+          <div class="grid grid-cols-12 text-[10px] font-mono text-slate-500 px-2 pb-1 border-b border-dark-border">
+            <span class="col-span-4">Address</span>
+            <span class="col-span-5">Data Bytes / Variable</span>
+            <span class="col-span-3 text-right">Owner</span>
+          </div>
+
+          <div id="memory-grid-container" class="flex flex-col gap-1.5">
+            <!-- Memory rows generated dynamically by JS -->
+          </div>
+
+        </div>
+
+        <!-- Memory Legend -->
+        <div class="grid grid-cols-3 gap-2 pt-1 border-t border-dark-border text-[11px]">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-brand-500 inline-block"></span>
+            <span class="text-slate-300">Primitive</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span>
+            <span class="text-slate-300">Pointer</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+            <span class="text-slate-300">Target Cell</span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Application Logic JS Engine -->
+  <script>
+    // System State Engine
+    const state = {
+      hexDisplay: false,
+      activeTab: 'simulator',
+      currentScenario: 'basic',
+      stepIndex: 0,
+      memory: [],
+      variables: {},
+      arithmetic: {
+        type: 'int',
+        offset: 0,
+        baseAddr: 0x7FFF0000
+      }
+    };
+
+    // Preset Code Execution Scenarios
+    const scenarios = {
+      basic: {
+        code: [
+          `int a = 42;`,
+          `int *p = &a;`,
+          `*p = 100;`,
+          `printf("%d", a);`
+        ],
+        steps: [
+          {
+            line: 0,
+            vars: { a: { type: 'int', val: 42, addr: '0x7FFF0000', size: 4 } },
+            expl: "Allocated 4 bytes for integer 'a' at address 0x7FFF0000 containing value 42."
+          },
+          {
+            line: 1,
+            vars: { 
+              a: { type: 'int', val: 42, addr: '0x7FFF0000', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' }
+            },
+            expl: "Address-of operator (&a) assigns the memory address of 'a' (0x7FFF0000) to pointer variable 'p'."
+          },
+          {
+            line: 2,
+            vars: { 
+              a: { type: 'int', val: 100, addr: '0x7FFF0000', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' }
+            },
+            expl: "Dereference operator (*p) accesses memory location 0x7FFF0000 and updates value of 'a' to 100."
+          },
+          {
+            line: 3,
+            vars: { 
+              a: { type: 'int', val: 100, addr: '0x7FFF0000', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' }
+            },
+            expl: "Printing 'a' outputs 100. Mutating via *p directly altered the underlying memory."
+          }
+        ]
+      },
+      swap: {
+        code: [
+          `int x = 10, y = 20;`,
+          `int *px = &x, *py = &y;`,
+          `int temp = *px;`,
+          `*px = *py;`,
+          `*py = temp;`
+        ],
+        steps: [
+          {
+            line: 0,
+            vars: {
+              x: { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              y: { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 }
+            },
+            expl: "Allocated variables 'x' (10) and 'y' (20) sequentially in memory."
+          },
+          {
+            line: 1,
+            vars: {
+              x: { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              y: { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              px: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' },
+              py: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
+            },
+            expl: "Pointers 'px' points to &x, 'py' points to &y."
+          },
+          {
+            line: 2,
+            vars: {
+              x: { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              y: { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              px: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' },
+              py: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' },
+              temp: { type: 'int', val: 10, addr: '0x7FFF0018', size: 4 }
+            },
+            expl: "Dereferenced *px (10) stored into local temporary variable 'temp'."
+          },
+          {
+            line: 3,
+            vars: {
+              x: { type: 'int', val: 20, addr: '0x7FFF0000', size: 4 },
+              y: { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              px: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' },
+              py: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' },
+              temp: { type: 'int', val: 10, addr: '0x7FFF0018', size: 4 }
+            },
+            expl: "Copied value of *py (20) into location *px ('x'). 'x' is now 20."
+          },
+          {
+            line: 4,
+            vars: {
+              x: { type: 'int', val: 20, addr: '0x7FFF0000', size: 4 },
+              y: { type: 'int', val: 10, addr: '0x7FFF0004', size: 4 },
+              px: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0008', size: 8, pointsTo: '0x7FFF0000' },
+              py: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' },
+              temp: { type: 'int', val: 10, addr: '0x7FFF0018', size: 4 }
+            },
+            expl: "Copied 'temp' (10) into location *py ('y'). Variable swap successfully complete!"
+          }
+        ]
+      },
+      double_ptr: {
+        code: [
+          `int val = 99;`,
+          `int *p = &val;`,
+          `int **pp = &p;`,
+          `**pp = 250;`
+        ],
+        steps: [
+          {
+            line: 0,
+            vars: { val: { type: 'int', val: 99, addr: '0x7FFF0004', size: 4 } },
+            expl: "Declared primitive integer 'val' = 99 at address 0x7FFF0004."
+          },
+          {
+            line: 1,
+            vars: {
+              val: { type: 'int', val: 99, addr: '0x7FFF0004', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
+            },
+            expl: "Single pointer 'p' holding address of 'val'."
+          },
+          {
+            line: 2,
+            vars: {
+              val: { type: 'int', val: 99, addr: '0x7FFF0004', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' },
+              pp: { type: 'int**', val: '0x7FFF0010', addr: '0x7FFF0018', size: 8, pointsTo: '0x7FFF0010' }
+            },
+            expl: "Double pointer 'pp' holding memory address of single pointer 'p' (0x7FFF0010)."
+          },
+          {
+            line: 3,
+            vars: {
+              val: { type: 'int', val: 250, addr: '0x7FFF0004', size: 4 },
+              p: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' },
+              pp: { type: 'int**', val: '0x7FFF0010', addr: '0x7FFF0018', size: 8, pointsTo: '0x7FFF0010' }
+            },
+            expl: "Double dereference (**pp) resolves through 'p' down to 'val', updating its content to 250."
+          }
+        ]
+      },
+      array_ptr: {
+        code: [
+          `int arr[3] = {10, 20, 30};`,
+          `int *ptr = arr;`,
+          `ptr = ptr + 1;`,
+          `*ptr = 88;`
+        ],
+        steps: [
+          {
+            line: 0,
+            vars: {
+              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 }
+            },
+            expl: "Array elements stored contiguously in memory with 4-byte spacing."
+          },
+          {
+            line: 1,
+            vars: {
+              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
+              ptr: { type: 'int*', val: '0x7FFF0000', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0000' }
+            },
+            expl: "Array name 'arr' decays to pointer targeting element 0 (&arr[0])."
+          },
+          {
+            line: 2,
+            vars: {
+              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              'arr[1]': { type: 'int', val: 20, addr: '0x7FFF0004', size: 4 },
+              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
+              ptr: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
+            },
+            expl: "Pointer arithmetic (ptr + 1) scales by sizeof(int) = 4 bytes, advancing address from 0x7FFF0000 to 0x7FFF0004 (&arr[1])."
+          },
+          {
+            line: 3,
+            vars: {
+              'arr[0]': { type: 'int', val: 10, addr: '0x7FFF0000', size: 4 },
+              'arr[1]': { type: 'int', val: 88, addr: '0x7FFF0004', size: 4 },
+              'arr[2]': { type: 'int', val: 30, addr: '0x7FFF0008', size: 4 },
+              ptr: { type: 'int*', val: '0x7FFF0004', addr: '0x7FFF0010', size: 8, pointsTo: '0x7FFF0004' }
+            },
+            expl: "Dereference *ptr updates element arr[1] to 88."
+          }
+        ]
+      }
+    };
+
+    // Initialize Page Application
+    window.addEventListener('DOMContentLoaded', () => {
+      loadScenario('basic');
+      updateArithmeticView();
+      window.addEventListener('resize', drawPointerArrows);
+    });
+
+    // Tab Navigation Switcher
+    function switchTab(tabId) {
+      state.activeTab = tabId;
+      document.querySelectorAll('.module-tab').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-600', 'text-white', 'shadow');
+        btn.classList.add('text-slate-400');
+      });
+
+      document.getElementById(`module-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      activeBtn.classList.add('bg-brand-600', 'text-white', 'shadow');
+      activeBtn.classList.remove('text-slate-400');
+
+      setTimeout(drawPointerArrows, 50);
+    }
+
+    // Load Scenario into Step Simulator
+    function loadScenario(scenarioKey) {
+      state.currentScenario = scenarioKey;
+      state.stepIndex = 0;
+
+      // Update Scenario Buttons Active/Inactive Colors
+      document.querySelectorAll('.scenario-btn').forEach(btn => {
+        btn.className = 'scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-dark-border bg-dark-bg text-slate-300 hover:border-slate-500 transition';
+      });
+      const activeScenarioBtn = document.getElementById(`btn-scenario-${scenarioKey}`);
+      if (activeScenarioBtn) {
+        activeScenarioBtn.className = 'scenario-btn px-3 py-1.5 rounded-lg text-xs font-mono border border-brand-500/40 bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 transition';
+      }
+
+      const sc = scenarios[scenarioKey];
+      
+      // Render C Code lines
+      const codeContainer = document.getElementById('code-container');
+      codeContainer.innerHTML = sc.code.map((line, idx) => `
+        <div id="code-line-${idx}" class="code-line font-mono text-xs flex items-center gap-3">
+          <span class="text-slate-600 w-4 select-none text-right">${idx + 1}</span>
+          <span class="text-slate-200">${escapeHtml(line)}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('sim-step-total').innerText = sc.steps.length;
+      updateStepView();
+    }
+
+    // Step Navigation Controls
+    function simNextStep() {
+      const sc = scenarios[state.currentScenario];
+      if (state.stepIndex < sc.steps.length - 1) {
+        state.stepIndex++;
+        updateStepView();
+      }
+    }
+
+    function simPrevStep() {
+      if (state.stepIndex > 0) {
+        state.stepIndex--;
+        updateStepView();
+      }
+    }
+
+    function simReset() {
+      state.stepIndex = 0;
+      updateStepView();
+    }
+
+    // Update Step View Visuals & Variables
+    function updateStepView() {
+      const sc = scenarios[state.currentScenario];
+      const step = sc.steps[state.stepIndex];
+
+      // Update Step Controls
+      document.getElementById('sim-step-num').innerText = state.stepIndex + 1;
+      document.getElementById('btn-prev').disabled = (state.stepIndex === 0);
+      document.getElementById('btn-next').disabled = (state.stepIndex === sc.steps.length - 1);
+
+      // Highlight Code Line
+      document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+      const activeLine = document.getElementById(`code-line-${step.line}`);
+      if (activeLine) activeLine.classList.add('active');
+
+      // Update Explanation
+      document.getElementById('sim-explanation').innerText = step.expl;
+
+      // Update Variables State
+      state.variables = step.vars;
+
+      renderVariableTable();
+      renderMemoryGrid();
+    }
+
+    // Render Active Variables Table
+    function renderVariableTable() {
+      const tbody = document.getElementById('variable-table-body');
+      tbody.innerHTML = '';
+
+      Object.entries(state.variables).forEach(([name, data]) => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-dark-card/50 transition';
+        row.innerHTML = `
+          <td class="py-2 text-brand-400 font-bold">${name}</td>
+          <td class="py-2 text-slate-400">${data.type}</td>
+          <td class="py-2 text-emerald-400">${data.addr}</td>
+          <td class="py-2 text-white font-semibold">${data.val}</td>
+          <td class="py-2 text-purple-400">${data.pointsTo || '-'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    // Render RAM Memory Layout Grid
+    function renderMemoryGrid() {
+      const grid = document.getElementById('memory-grid-container');
+      grid.innerHTML = '';
+
+      // Memory slot addresses base space
+      const baseAddrs = [
+        '0x7FFF0000', '0x7FFF0004', '0x7FFF0008', '0x7FFF000C',
+        '0x7FFF0010', '0x7FFF0014', '0x7FFF0018', '0x7FFF001C'
+      ];
+
+      baseAddrs.forEach(addr => {
+        // Find variable matching address
+        const matchedVarEntry = Object.entries(state.variables).find(([_, v]) => v.addr === addr);
+        const varName = matchedVarEntry ? matchedVarEntry[0] : null;
+        const varData = matchedVarEntry ? matchedVarEntry[1] : null;
+
+        const isPointer = varData && varData.type.includes('*');
+        const cellId = `mem-cell-${addr.replace('0x', '')}`;
+
+        const cell = document.createElement('div');
+        cell.id = cellId;
+        cell.className = `memory-cell grid grid-cols-12 items-center p-2.5 rounded-lg border font-mono text-xs ${
+          varData 
+            ? isPointer 
+              ? 'bg-purple-950/30 border-purple-500/40 text-purple-200 pointer-source' 
+              : 'bg-brand-950/30 border-brand-500/40 text-brand-200 active-cell-highlight'
+            : 'bg-dark-card/30 border-dark-border text-slate-500'
+        }`;
+
+        let displayVal = varData ? varData.val : '0x00';
+        if (state.hexDisplay && typeof displayVal === 'number') {
+          displayVal = '0x' + displayVal.toString(16).toUpperCase();
+        }
+
+        cell.innerHTML = `
+          <span class="col-span-4 text-slate-400 text-[11px]">${addr}</span>
+          <span class="col-span-5 font-bold ${varData ? 'text-white' : 'text-slate-600'}">${displayVal}</span>
+          <span class="col-span-3 text-right text-[11px] ${isPointer ? 'text-purple-400' : 'text-brand-400'} font-semibold">${varName || 'unallocated'}</span>
+        `;
+
+        grid.appendChild(cell);
+      });
+
+      setTimeout(drawPointerArrows, 30);
+    }
+
+    // Dynamic SVG Arrow Connector Renderer
+    function drawPointerArrows() {
+      const svg = document.getElementById('pointer-svg-canvas');
+      svg.innerHTML = svg.querySelector('defs').outerHTML; // Preserve defs
+
+      if (state.activeTab !== 'simulator') return;
+
+      Object.entries(state.variables).forEach(([name, data]) => {
+        if (data.pointsTo) {
+          const sourceCell = document.getElementById(`mem-cell-${data.addr.replace('0x', '')}`);
+          const targetCell = document.getElementById(`mem-cell-${data.pointsTo.replace('0x', '')}`);
+
+          if (sourceCell && targetCell) {
+            const sRect = sourceCell.getBoundingClientRect();
+            const tRect = targetCell.getBoundingClientRect();
+
+            // Right side curved SVG arc path
+            const x1 = sRect.right - 10;
+            const y1 = sRect.top + sRect.height / 2;
+            const x2 = tRect.right - 10;
+            const y2 = tRect.top + tRect.height / 2;
+
+            const dx = Math.abs(x2 - x1) + 40;
+            const cx = Math.max(x1, x2) + 30;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#38bdf8');
+            path.setAttribute('stroke-width', '2');
+            path.setAttribute('marker-end', 'url(#arrowhead)');
+            path.setAttribute('class', 'arrow-path');
+            path.setAttribute('filter', 'url(#glow)');
+
+            svg.appendChild(path);
+          }
+        }
+      });
+    }
+
+    // Toggle Hex Memory View
+    function toggleHexMode() {
+      state.hexDisplay = !state.hexDisplay;
+      document.getElementById('btn-hex-mode').innerText = `Hex View: ${state.hexDisplay ? 'ON' : 'OFF'}`;
+      renderMemoryGrid();
+    }
+
+    // Indirection Evaluation Module Functionality
+    function evalIndirection(target) {
+      const targetVal = document.getElementById('chain-target-val');
+      const boxVal = document.getElementById('chain-target');
+      const boxP = document.getElementById('chain-ptr1');
+      const boxPP = document.getElementById('chain-ptr2');
+
+      [boxVal, boxP, boxPP].forEach(b => b.classList.remove('ring-2', 'ring-purple-400', 'ring-brand-400', 'ring-emerald-400'));
+
+      if (target === 'val') {
+        boxVal.classList.add('ring-2', 'ring-emerald-400');
+      } else if (target === 'p') {
+        boxP.classList.add('ring-2', 'ring-brand-400');
+        boxVal.classList.add('ring-2', 'ring-emerald-400');
+      } else if (target === 'pp') {
+        boxPP.classList.add('ring-2', 'ring-purple-400');
+        boxP.classList.add('ring-2', 'ring-brand-400');
+        boxVal.classList.add('ring-2', 'ring-emerald-400');
+      }
+    }
+
+    function mutateViaPointer() {
+      const newVal = document.getElementById('indirection-new-val').value;
+      document.getElementById('chain-target-val').innerText = `Value: ${newVal}`;
+      evalIndirection('pp');
+    }
+
+    // Pointer Arithmetic Engine Updates
+    function updateArithmeticView() {
+      const type = document.getElementById('arith-type').value;
+      const offset = parseInt(document.getElementById('arith-offset').value);
+
+      const typeSizes = { char: 1, short: 2, int: 4, double: 8 };
+      const size = typeSizes[type];
+
+      document.getElementById('arith-offset-val').innerText = `+${offset}`;
+
+      const base = state.arithmetic.baseAddr;
+      const finalAddr = base + (offset * size);
+
+      document.getElementById('arith-formula').innerHTML = `
+        0x7FFF0000 + (<span class="text-amber-400">${offset}</span> * <span class="text-purple-400">${size} bytes</span>) = 
+        <span class="text-emerald-400 font-bold">0x${finalAddr.toString(16).toUpperCase()}</span>
+      `;
+
+      // Render Visual Byte Strip
+      const strip = document.getElementById('arithmetic-visual-strip');
+      strip.innerHTML = '';
+
+      const container = document.createElement('div');
+      container.className = 'flex items-center gap-1 min-w-[500px]';
+
+      for (let i = 0; i < 16; i++) {
+        const currentByteAddr = base + i;
+        const activeBlockIndex = Math.floor(i / size);
+        const isSelectedBlock = activeBlockIndex === offset && i < (offset + 1) * size;
+
+        const cell = document.createElement('div');
+        cell.className = `flex-1 h-12 rounded border flex flex-col items-center justify-center font-mono text-[10px] transition-all ${
+          isSelectedBlock 
+            ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-bold scale-105' 
+            : 'bg-dark-card border-dark-border text-slate-500'
+        }`;
+        cell.innerHTML = `
+          <span>+${i}B</span>
+          <span class="text-[8px] opacity-75">${(currentByteAddr % 16).toString(16).toUpperCase()}</span>
+        `;
+        container.appendChild(cell);
+      }
+
+      strip.appendChild(container);
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>
